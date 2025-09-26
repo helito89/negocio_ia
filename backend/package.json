@@ -1,0 +1,40 @@
+{
+  "name": "multi-tenant-ia-backend",
+  "version": "1.0.0",
+  "description": "Backend multi-tenant con IA",
+  "scripts": {
+    "prebuild": "rimraf dist",
+     "build": "rm -rf node_modules dist && npm install && nest build && copyfiles resources/*.png dist && copyfiles package.json dist && npm i --force --prefix ./dist ./",
+    "start": "nest start",
+    "start:dev": "nest start --watch"
+  },
+  "dependencies": {
+    "@nestjs/cli": "^11.0.10",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/typeorm": "^11.0.0",
+    "bcryptjs": "^3.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "openai": "^5.23.0",
+    "passport": "^0.7.0",
+    "passport-headerapikey": "^1.2.2",
+    "passport-jwt": "^4.0.1",
+    "passport-local": "^1.0.0",
+    "pg": "^8.16.3",
+    "redis": "^5.8.2",
+    "typeorm": "^0.3.27"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^24.5.2",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/passport-local": "^1.0.38",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.2"
+  }
+}

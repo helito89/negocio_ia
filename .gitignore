@@ -1,11 +1,11 @@
 # Nestjs specific
-/dist
-/node_modules
-/build
-/tmp
+backend/dist
+backend/node_modules
+backend/build
+backend/tmp
 
 # Logs
-logs
+backend/log
 *.log
 npm-debug.log*
 pnpm-debug.log*
@@ -22,3 +22,7 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+.idea/
+!.idea/*.iml
+
