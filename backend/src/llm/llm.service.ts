@@ -11,7 +11,6 @@ export class LlmService {
 
     async generateResponse(prompt: string, context?: string): Promise<string> {
 
-
         try {
             const fullPrompt = context
                 ? `Contexto: ${context}\n\nPregunta: ${prompt}\n\nRespuesta:`

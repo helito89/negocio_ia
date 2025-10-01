@@ -19,7 +19,7 @@ import {DatabaseModule} from "./database/database.module";
             useFactory: (configService: ConfigService) => ({
                 type: 'postgres',
                 host: 'localhost',
-                port: 5433,
+                port: 5432,
                 username: 'postgres',
                 password: '',
                 database: 'rubyledger_development',

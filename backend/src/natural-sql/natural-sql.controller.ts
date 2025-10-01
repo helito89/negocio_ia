@@ -24,6 +24,17 @@ export class NaturalSQLController {
         const result = await this.naturalSQLService.processNaturalQuery(request.pregunta);
 
         const executionTime = Date.now() - startTime;
+        let correctTime= '';
+
+        if (executionTime < 1000) {
+            correctTime = `${executionTime} executionTime`;
+        } else if (executionTime < 60 * 1000) {
+            correctTime = `${(executionTime / 1000).toFixed(2)} s`;
+        } else if (executionTime < 60 * 60 * 1000) {
+            correctTime = `${(executionTime / (1000 * 60)).toFixed(2)} min`;
+        } else {
+            correctTime = `${(executionTime / (1000 * 60 * 60)).toFixed(2)} h`;
+        }
 
         return {
             pregunta: request.pregunta,
@@ -31,7 +42,7 @@ export class NaturalSQLController {
             explicacion: result.explanation,
             resultados: result.results,
             cantidadResultados: result.results.length,
-            tiempoEjecucion: `${executionTime}ms`,
+            tiempoEjecucion: correctTime,
             error: result.error,
             timestamp: new Date().toISOString(),
         };

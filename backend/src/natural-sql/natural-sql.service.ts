@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { LlmService } from '../llm/llm.service';
-import { SchemaService } from '../database/schema.service';
-import { InjectConnection } from '@nestjs/typeorm';
-import { Connection } from 'typeorm';
+import {Injectable} from '@nestjs/common';
+import {LlmService} from '../llm/llm.service';
+import {SchemaService} from '../database/schema.service';
+import {InjectConnection} from '@nestjs/typeorm';
+import {Connection} from 'typeorm';
 
 @Injectable()
 export class NaturalSQLService {
@@ -11,7 +11,8 @@ export class NaturalSQLService {
         private readonly schemaService: SchemaService,
         @InjectConnection()
         private readonly connection: Connection,
-    ) {}
+    ) {
+    }
 
     async processNaturalQuery(naturalQuestion: string): Promise<{
         sqlQuery: string;
@@ -24,12 +25,17 @@ export class NaturalSQLService {
             const schema = await this.schemaService.getDatabaseSchema();
 
             // 2. Generar SQL a partir de la pregunta natural
-            const sqlQuery = await this.generateSQLFromQuestion(naturalQuestion, schema);
+            const sqlQueryRelation = await this.obtainRelationFromQuestion(naturalQuestion, schema);
 
-            // 3. Ejecutar la consulta
+            console.log(sqlQueryRelation);
+
+            // 3. Generar SQL a partir de la pregunta natural
+            const sqlQuery = await this.generateSQLFromQuestion(naturalQuestion, schema, sqlQueryRelation);
+
+            // 4. Ejecutar la consulta
             const results = await this.executeSafeQuery(sqlQuery);
 
-            // 4. Generar explicación en lenguaje natural
+            // 5. Generar explicación en lenguaje natural
             const explanation = await this.generateExplanation(naturalQuestion, sqlQuery, results);
 
             return {
@@ -47,8 +53,8 @@ export class NaturalSQLService {
         }
     }
 
-    private async generateSQLFromQuestion(question: string, schema: any[]): Promise<string> {
-        const prompt = this.buildSQLGenerationPrompt(question, schema);
+    private async generateSQLFromQuestion(question: string, schema: any[], sqlQueryRelation: string): Promise<string> {
+        const prompt = this.buildSQLGenerationPrompt(question, schema, sqlQueryRelation);
 
         const response = await this.llmService.generateResponse(prompt);
 
@@ -66,14 +72,35 @@ export class NaturalSQLService {
         return this.validateAndCleanSQL(sqlQuery);
     }
 
-    private buildSQLGenerationPrompt(question: string, schema: any[]): string {
+    private async obtainRelationFromQuestion(question: string, schema: any[]): Promise<string> {
+        const prompt = this.obtainRelationFromQuestionPrompt(question, schema);
+
+        const response = await this.llmService.generateResponse(prompt);
+
+        // Extraer solo el SQL de la respuesta
+        const sqlMatch = response.match(/```sql\n([\s\S]*?)\n```/) ||
+            response.match(/SELECT[\s\S]*?(?=;|$)/i);
+
+        if (!sqlMatch) {
+            throw new Error('No se pudo generar una consulta SQL válida');
+        }
+
+        let sqlQuery = sqlMatch[1] || sqlMatch[0];
+
+        // Validar y limpiar la consulta
+        return this.validateAndCleanSQL(sqlQuery);
+    }
+
+    private buildSQLGenerationPrompt(question: string, schema: any[], sqlQueryRelation: string): string {
         const schemaDescription = this.formatSchemaForPrompt(schema);
+
+        console.log(sqlQueryRelation);
 
         return `
 Eres un experto en PostgreSQL. Convierte la siguiente pregunta en una consulta SQL válida.
 
-=== ESQUEMA DE LA BASE DE DATOS ===
-${schemaDescription}
+=== RELACIONES ENCONTRADAS ===
+${sqlQueryRelation}
 
 === REGLAS IMPORTANTES ===
 1. Usa únicamente consultas SELECT — nunca INSERT, UPDATE, DELETE, DROP u otras modificaciones.
@@ -104,7 +131,7 @@ ${schemaDescription}
 14. Esto usa REGR_SLOPE y REGR_INTERCEPT (regresión lineal en SQL) para proyectar.
 15. Puedes usar cursores, with o cualquier otra manera de consolidar o computar la información para obtener la generación
 más exacta o aproximada.
-16. Evita usar comentario al generar las consultas ó si es necesario los comentarios se realizan usando --
+16. Evita usar comentario al generar las consultas ó si es necesario los comentarios se realizan usando
 
 === RESTRICCIONES CRÍTICAS ===
 - Usa únicamente las columnas definidas en el esquema.  
@@ -113,35 +140,91 @@ más exacta o aproximada.
 - Aplica WHERE columna IS NOT NULL en columnas que acepten nulos.  
 - Por defecto, redondea cálculos a 2 decimales con ROUND.  
 
-=== ESQUEMA DISPONIBLE ===
-Tabla: factura_de_vents  
-- fv_fecha (DATE, NOT NULL): Fecha de emisión de la factura.  
-- fv_anular (BOOLEAN): Factura anulada.  
-- fv_cancelada (BOOLEAN): Factura cancelada.  
-- fv_impresa (BOOLEAN): Indica si se imprimió una factura original.  
-- fv_numero_factura (INTEGER): Número de factura.  
-- fv_subtotal_factura (NUMERIC): Subtotal de la factura.  
-- num_reimpresion (INTEGER, NULLABLE): Número de veces que se ha reimpreso la factura.  
-
-Tabla: recibos  
-- rec_fecha (DATE, NOT NULL): Fecha de emisión del recibo.  
-- rec_anular (BOOLEAN): Recibo anulado.  
-- fv_cancelada (BOOLEAN): Factura cancelada.  
-- rec_impres0 (BOOLEAN): Indica si se imprimió un recibo original.  
-- fv_numero (INTEGER): Número de recibo.  
-- rec_tasa_cambio (INTEGER): Tasa de cambio.  
-- cliente_id (UUID): Id de cliente asociado al recibo.  
-
-Tabla: clientes  
-- cli_nombre (TEXT): Nombre del cliente.  
-- cliente_ruc (TEXT): Número RUC del cliente.  
-
 === INSTRUCCIONES DE SALIDA ===
 - Devuelve SOLO la consulta SQL, formateada con saltos de línea y sangría para máxima legibilidad.  
 - No expliques la consulta, solo entrégala lista para ejecutar en PostgreSQL.  
 
 PREGUNTA EN ESPAÑOL: "${question}"
 `;
+    }
+
+    private obtainRelationFromQuestionPrompt(question: string, schema: any[]): string {
+        const schemaDescription = this.formatSchemaForPrompt(schema);
+        let prompt = '';
+
+        prompt = `
+1. Recibe una pregunta en lenguaje natural.
+2. Analiza el esquema completo de la base de datos.
+3. Filtra las tablas y columnas que parecen relevantes basándote en las palabras clave de la pregunta.
+4. Ignora tablas que no tengan relación directa con la intención o términos de la pregunta.
+5. Genera la respuesta texto basándote solo en las tablas seleccionadas.
+6. Responde solo con la estructura de la o las tablas que tenga lógica según la pregunta.
+
+NO INCLUYAS:
+- Relaciones innecesarias.
+
+### Esquema de tablas:
+Tabla: factura_de_vents
+  - fv_id (integer) [PRIMARY KEY]
+  - fv_anular (boolean)
+  - fv_cancelada (boolean)
+  - fv_expira (date)
+  - fv_fecha (date)
+  - fv_impresa (boolean)
+  - fv_impuesto (numeric)
+  - fv_numero_factura (integer)
+  - fv_ticket (boolean)
+  - fv_tipo_cambio (numeric)
+  - cliente_id (integer)
+  - centro_de_costo_id (integer)
+  - tipo_factura_id (integer)
+  - tipo_moneda_id (integer)
+  - fv_porcentaje_descuento (numeric)
+  - fv_porcentaje_impuesto (numeric)
+  - fv_subtotal_factura (numeric)
+  - fv_exonerada (boolean)
+  - fv_numero_exoneracion (character varying)
+  - fv_monto_descuento (numeric)
+  - num_reimpresion (integer)
+  - empleado_id (integer)
+  - autogenerada (boolean)
+  - mora (numeric)
+  - mora_exonerada (boolean)
+  - fv_exportacion (boolean)
+  - consecutivo_de_serie_id (integer)
+  - factura_masiva_id (integer)
+  - fv_concepto (character varying)
+  - sucursal_sede_id (integer)
+  - fecha_de_anulacion (date)
+  - cotizacion_id (integer)
+  - created_at (timestamp without time zone)
+  - updated_at (timestamp without time zone)
+  - fecha_de_cancelacion (date)
+  - mora_congelada (numeric)
+  - monto_grabable (numeric)
+  - permitir_ventas_por_debajo_del_costo (boolean)
+  - factura_rapida_id (integer)
+  - codigo (character varying)
+  - nombre (character varying)
+  - nc_id (integer)
+  - asignado (character varying)
+  - facturacion_recurrente_id (integer)
+  - estado_id (integer)
+  - punto_de_venta (boolean)
+  - catalogo_proyecto_id (integer)
+  - financiamiento_activo (boolean)
+  - financiamiento_id (bigint)
+  - financiamiento_periodo_id (bigint)
+  - financiamiento_tasa_id (bigint)
+  - fv_prima_minima (numeric)
+  - fv_prima_abonada (numeric)
+  - fv_monto_financiamiento (numeric)
+  - preventa_id (integer) [FK → preventas.id]
+
+### Pregunta:
+"${question}"
+`;
+        return prompt;
     }
 
     private formatSchemaForPrompt(schema: any[]): string {
@@ -202,6 +285,20 @@ PREGUNTA EN ESPAÑOL: "${question}"
         }
 
         return cleanSQL;
+    }
+
+    public getExecutionTime(startTime) {
+        const ms = Date.now() - startTime;
+
+        if (ms < 1000) {
+            return `${ms} ms`;
+        } else if (ms < 60 * 1000) {
+            return `${(ms / 1000).toFixed(2)} s`;
+        } else if (ms < 60 * 60 * 1000) {
+            return `${(ms / (1000 * 60)).toFixed(2)} min`;
+        } else {
+            return `${(ms / (1000 * 60 * 60)).toFixed(2)} h`;
+        }
     }
 
     private async generateExplanation(question: string, sqlQuery: string, results: any[]): Promise<string> {
